@@ -2742,3 +2742,1613 @@ public class Demo1 {
 }
 ```
 
+### 使用volatile实现两阶段终止模式
+
+```java
+package tu.learn.test2;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j(topic = "c.TPTVolatile")
+class TPTVolatile{
+    private Thread thread;
+    private  volatile  boolean stop = false;
+
+    public void start(){
+       thread = new Thread(()->{
+           while (true){
+               if(stop){
+                   log.debug("料理后事");
+                   break;
+               }
+               try {
+                   Thread.sleep(1000);
+               } catch (InterruptedException e) {
+
+               }
+               log.debug("running");
+           }
+       },"监控线程");
+       thread.start();
+    }
+
+    public void stop(){
+        stop = true;
+        thread.interrupt();
+    }
+}
+@Slf4j(topic = "c.Demo1")
+public class Demo1 {
+    public static void main(String[] args) throws InterruptedException {
+        TPTVolatile t = new TPTVolatile();
+        t.start();
+
+        Thread.sleep(3000);
+        log.debug("stop");
+        t.stop();
+    }
+}
+```
+
+## 四、共享模式之无锁
+
+### 实现一个无锁的例子
+
+```java
+package tu.learn.test2;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
+@Slf4j(topic = "c.Demo2")
+public class Demo2 {
+    public static void main(String[] args) {
+        AtomicInteger balance = new AtomicInteger(10000);
+        int mainPrev = balance.get();
+        log.debug("try get {}", mainPrev);
+        new Thread(() -> {
+            sleep(1000);
+            int prev = balance.get();
+            balance.compareAndSet(prev, 9000);
+            log.debug(balance.toString());
+        }, "t1").start();
+        sleep(2000);
+        log.debug("try set 8000...");
+        boolean isSuccess = balance.compareAndSet(mainPrev, 8000);
+        log.debug("is success ? {}", isSuccess);
+        if(!isSuccess){
+            mainPrev = balance.get();
+            log.debug("try set 8000...");
+            isSuccess = balance.compareAndSet(mainPrev, 8000);
+            log.debug("is success ? {}", isSuccess);
+        }
+    }
+    private static void sleep(int millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+```
+
+### 原子整数
+
+包括AtomicBoolean、AtomicInteger、AtomicLong，以AtomicInteger为例展示相关操作。
+
+```
+package tu.learn.test2;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
+@Slf4j(topic = "c.Demo3")
+public class Demo3 {
+    public static void main(String[] args) {
+        AtomicInteger i = new AtomicInteger(0);//i=0;
+        System.out.println(i.getAndIncrement());//输出0，i=1
+        System.out.println(i.decrementAndGet());//输出0，i=0
+        System.out.println(i.getAndAdd(5));//输出0，i=5
+        System.out.println(i.addAndGet(-5));//输出0，i=0
+        System.out.println(i.getAndUpdate(p->p-2));//输出0，i=-2
+        System.out.println(i.getAndAccumulate(10,(p,x)->p+x));//输出-2，i=8
+    }
+}
+```
+
+### 原子引用
+
+包括AtomicReference、AtomicMarkableReference、AtomicStampedReference
+
+利用原子引用保证账户取钱的安全实现。
+
+```java
+package tu.learn.test2;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
+interface DecimalAccount {
+    // 获取余额
+    BigDecimal getBalance();
+    // 取款
+    void withdraw(BigDecimal amount);
+    /**
+     * 方法内会启动 1000 个线程，每个线程做 -10 元 的操作
+     * 如果初始余额为 10000 那么正确的结果应当是 0
+     */
+    static void demo(DecimalAccount account) {
+        List<Thread> ts = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            ts.add(new Thread(() -> {
+                account.withdraw(BigDecimal.TEN);
+            }));
+        }
+        ts.forEach(Thread::start);
+        ts.forEach(t -> {
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        System.out.println(account.getBalance());
+    }
+}
+class DecimalAccountSafeCas implements DecimalAccount{
+    AtomicReference<BigDecimal> ref;
+
+    public DecimalAccountSafeCas(BigDecimal ref) {
+        this.ref = new AtomicReference<>(ref);
+    }
+
+    @Override
+    public BigDecimal getBalance() {
+        return ref.get();
+    }
+
+    @Override
+    public void withdraw(BigDecimal amount) {
+        while (true){
+            BigDecimal prev = ref.get();
+            BigDecimal next = prev.subtract(amount);
+            if(ref.compareAndSet(prev,next)){
+                break;
+            }
+        }
+    }
+}
+@Slf4j(topic = "c.Demo4")
+public class Demo4 {
+    public static void main(String[] args) {
+        DecimalAccount.demo(new DecimalAccountSafeCas(new BigDecimal("10000")));
+    }
+}
+```
+
+利用AtomicStampedReference记录ABA问题中被修改几次
+
+```
+package tu.learn.test2;
+
+import com.sun.xml.internal.messaging.saaj.util.LogDomainConstants;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicStampedReference;
+
+@Slf4j(topic = "c.Demo5")
+public class Demo5 {
+    static AtomicStampedReference<String> ref = new AtomicStampedReference<>("A",0);
+    public static void main(String[] args) throws InterruptedException {
+        log.debug("main start...");
+        String prev = ref.getReference();
+        int stamp = ref.getStamp();
+        log.debug("版本 {}",stamp);
+        other();
+        Thread.sleep(1000);
+        log.debug("change A->C {}",ref.compareAndSet(prev,"C",stamp,stamp+1));
+    }
+
+    private static void other() throws InterruptedException {
+        new Thread(()->{
+            log.debug("change A->B {}",ref.compareAndSet(ref.getReference(),"B",ref.getStamp(),ref.getStamp()+1));
+            log.debug("更新版本为 {}",ref.getStamp());
+        },"t1").start();
+
+        Thread.sleep(500);
+
+        new Thread(()->{
+            log.debug("change B->A {}",ref.compareAndSet(ref.getReference(),"A",ref.getStamp(),ref.getStamp()+1));
+            log.debug("更新版本为 {}",ref.getStamp());
+        },"t2").start();
+    }
+}
+```
+
+利用AtomicMarkableReference记录ABA问题中是否有更改
+
+```
+package tu.learn.test2;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicMarkableReference;
+
+class GarbageBag{
+    String desc;
+
+    public GarbageBag(String desc) {
+        this.desc = desc;
+    }
+
+    public String getDesc() {
+        return desc;
+    }
+
+    public void setDesc(String desc) {
+        this.desc = desc;
+    }
+
+    @Override
+    public String toString() {
+        return super.toString() + " " + desc;
+    }
+
+}
+@Slf4j(topic = "c.Demo6")
+public class Demo6 {
+    public static void main(String[] args) throws InterruptedException {
+        GarbageBag bag = new GarbageBag("装满了垃圾");
+        AtomicMarkableReference<GarbageBag> ref = new AtomicMarkableReference<>(bag,true);
+        log.debug("main start...");
+        GarbageBag prev = ref.getReference();
+        log.debug(prev.toString());
+
+        new Thread(()->{
+            log.debug("打扫卫生的线程 start...");
+            bag.setDesc("空垃圾袋");
+            while (!ref.compareAndSet(prev,bag,true,false)){}
+            log.debug(bag.toString());
+        }).start();
+
+        Thread.sleep(1000);
+        log.debug("主线程想换一只垃圾袋");
+        boolean success = ref.compareAndSet(prev,new GarbageBag("空垃圾袋"),true,false);
+        log.debug("换了吗"+success);
+        log.debug(ref.getReference().toString());
+    }
+}
+```
+
+### 原子数组
+
+实现安全和不安全的数组
+
+```java
+package tu.learn.test2;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+@Slf4j(topic = "c.Demo7")
+public class Demo7 {
+    public static void main(String[] args) {
+        //不安全的数组
+        demo(
+                ()->new int[10],
+                (array)->array.length,
+                (array,index) -> array[index] ++,
+                array -> System.out.println(Arrays.toString(array))
+        );
+        //安全的数组
+        demo(
+                ()->new AtomicIntegerArray(10),
+                (array)->array.length(),
+                (array,index) -> array.getAndIncrement(index),
+                array -> System.out.println(array)
+        );
+    }
+    private static<T> void demo(Supplier<T> arraySupplier,
+                                Function<T,Integer> lengthFun,
+                                BiConsumer<T,Integer> putConsumer,
+                                Consumer<T> printConsumer){
+        List<Thread> ts = new ArrayList<>();
+        T array = arraySupplier.get();
+        int length = lengthFun.apply(array);
+        for(int i = 0; i < length; i ++){
+            ts.add(new Thread(()->{
+                for(int j = 0; j < 10000; j ++){
+                    putConsumer.accept(array,j%length);
+                }
+            }));
+        }
+
+        ts.forEach(t -> t.start());
+        ts.forEach(t->{
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        printConsumer.accept(array);
+    }
+}
+```
+
+### 字段更新器
+
+AtomicReferenceFieldUpdater、AtomicIntegerFieldUpdater、 AtomicLongFieldUpdater
+
+利用字段更新器实现代码
+
+```java
+package tu.learn.test2;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+
+@Slf4j(topic = "c.Demo8")
+public class Demo8 {
+    private volatile int field;
+
+    public static void main(String[] args) {
+        AtomicIntegerFieldUpdater fieldUpdater =
+                AtomicIntegerFieldUpdater.
+                        newUpdater(Demo8.class,"field");
+        Demo8 demo8 = new Demo8();
+        fieldUpdater.compareAndSet(demo8,0,10);
+        // 修改成功 field = 10
+        System.out.println(demo8.field);
+        // 修改成功 field = 20
+        fieldUpdater.compareAndSet(demo8, 10, 20);
+        System.out.println(demo8.field);
+        // 修改失败 field = 20
+        fieldUpdater.compareAndSet(demo8, 10, 30);
+        System.out.println(demo8.field);
+    }
+}
+```
+
+### 原子累加器LongAdder
+
+原子累加器性能比较
+
+```java
+package tu.learn.test2;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+@Slf4j(topic = "c.Demo9")
+public class Demo9 {
+    public static void main(String[] args) {
+        for (int i = 0; i < 5; i++) {
+            demo(() -> new LongAdder(), adder -> adder.increment());
+        }
+        for (int i = 0; i < 5; i++) {
+            demo(() -> new AtomicLong(), adder -> adder.getAndIncrement());
+        }
+
+    }
+
+    private static<T> void demo(Supplier<T> adderSupplier,
+                                Consumer<T> action){
+        T adder = adderSupplier.get();
+
+        long start = System.nanoTime();
+
+        List<Thread> ts = new ArrayList<>();
+        for(int i = 0; i < 40; i ++){
+            ts.add(new Thread(()->{
+                for(int j = 0; j < 500000; j ++){
+                    action.accept(adder);
+                }
+            }));
+        }
+        ts.forEach(t->t.start());
+        ts.forEach(t->{
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+
+        long end = System.nanoTime();
+        System.out.println(adder + " cost:" + (end-start)/1000_000);
+    }
+}
+```
+
+![image-20240417135613503](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240417135613503.png)
+
+## 五、 共享模型之不可变和共享模型工具
+
+### 不可变的日期转换DateTimeFormatter
+
+```
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
+@Slf4j(topic = "c.Demo1")
+public class Demo1 {
+    public static void main(String[] args) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        for (int i = 0; i < 10; i++) {
+            new Thread(() -> {
+                LocalDate date = dtf.parse("2024-05-01",LocalDate::from);
+                log.debug("{}",date);
+            }).start();
+        }
+    }
+}
+```
+
+### 自定义一个线程池
+
+```java
+package tu.learn.test3;
+
+import javafx.concurrent.Task;
+import lombok.extern.slf4j.Slf4j;
+
+import javax.swing.text.StyledEditorKit;
+import java.sql.Time;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+//步骤1：自定义拒绝策略接口
+@FunctionalInterface//拒绝策略
+interface RejectPolicy<T>{
+    void reject(BlockingQueue<T> queue, T task);
+}
+
+
+//步骤2：自定义任务队列
+class BlockingQueue<T> {
+    //1.任务队列
+    private Deque<T> queue = new ArrayDeque<>();
+    //2.锁
+    private ReentrantLock lock = new ReentrantLock();
+
+    //3.生产者条件变量
+    private Condition fulllWaitSet = lock.newCondition();
+    //4.消费者条件变量
+    private Condition emptyWaitSet = lock.newCondition();
+    //5.容量
+    private int capcity;
+
+    public BlockingQueue(int capcity) {
+        this.capcity = capcity;
+    }
+
+    /**
+     * 阻塞获取
+     * @return
+     */
+    public T take(){
+        lock.lock();
+        try {
+            while (queue.isEmpty()){
+                try {
+                    emptyWaitSet.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            T t = queue.removeFirst();
+            fulllWaitSet.signal();
+            return t;
+        }finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 带超时的阻塞获取
+     * @param timeout
+     * @param unit
+     * @return
+     */
+    public T poll(long timeout, TimeUnit unit){
+        lock.lock();
+        try {
+            long nanos = unit.toNanos(timeout);
+            while (queue.isEmpty()){
+                try {
+                    if(nanos <= 0)return null;
+                    nanos = emptyWaitSet.awaitNanos(nanos);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            T t = queue.removeFirst();
+            fulllWaitSet.signal();
+            return t;
+        }finally {
+            lock.unlock();
+        }
+    }
+    /**
+     * 阻塞添加
+     * @param element
+     */
+    public void put(T element){
+        lock.lock();
+        try{
+            while (queue.size() == capcity){
+                try {
+                    fulllWaitSet.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            queue.addLast(element);
+            emptyWaitSet.signal();
+        }finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 带超时时间阻塞添加
+     * @param task
+     * @param timeout
+     * @param timeUnit
+     * @return
+     */
+    public boolean offer(T task,long timeout,TimeUnit timeUnit){
+        lock.lock();
+        long nanos = timeUnit.toNanos(timeout);
+        try{
+            while (queue.size() == capcity){
+                try {
+                    if(nanos <= 0){
+                        return false;
+                    }
+                    nanos = fulllWaitSet.awaitNanos(nanos);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            queue.addLast(task);
+            emptyWaitSet.signal();
+            return true;
+        }finally {
+            lock.unlock();
+        }
+    }
+    public int size(){
+        return queue.size();
+    }
+
+    public void tryPut(RejectPolicy<T> rejectPolicy, T task) {
+        lock.lock();
+        try{
+            if(queue.size() == capcity){
+                rejectPolicy.reject(this,task);
+            }else{
+                queue.addLast(task);
+                emptyWaitSet.signal();
+            }
+        }finally {
+            lock.unlock();
+        }
+    }
+}
+
+class ThreadPool{
+    //线程集合
+    private HashSet<Worker> workers = new HashSet<>();
+    //任务队列
+    private BlockingQueue<Runnable> taskQueue;
+
+    //核心线程数
+    private int coreSize;
+
+    //获取任务的超时时间
+    private long timeout;
+
+    private TimeUnit timeUnit;
+
+    private RejectPolicy<Runnable> rejectPolicy;
+    /**
+     * 执行任务
+     * @param task
+     */
+    public void execute(Runnable task){
+        //当任务数没有超过coreSize时，直接交给worker对象执行，否则加入任务队列暂存
+        synchronized (workers){
+            if(workers.size() < coreSize){
+                Worker worker = new Worker(task);
+                workers.add(worker);
+                worker.start();
+            }else{
+//                taskQueue.put(task);
+                //任务满了后的操作
+                //1)死等
+                //2)带超时等待
+                //3)放弃任务执行
+                //4)让调用者抛出异常
+                //5)让调用者自己执行任务
+                taskQueue.tryPut(rejectPolicy, task);
+            }
+        }
+    }
+    public ThreadPool(TimeUnit timeUnit, int coreSize, long timeout,int queueCapcity, RejectPolicy<Runnable> rejectPolicy) {
+        this.taskQueue = new BlockingQueue<>(queueCapcity);
+        this.coreSize = coreSize;
+        this.timeout = timeout;
+        this.timeUnit = timeUnit;
+        this.rejectPolicy = rejectPolicy;
+    }
+
+    class Worker extends Thread{
+        private Runnable task;
+
+        public Worker(Runnable task) {
+            this.task = task;
+        }
+
+        @Override
+        public void run() {
+            //执行任务，当task不为空执行任务，若task执行完毕，再接着从任务队列获取任务并执行
+            while (task != null || (task = taskQueue.poll(timeout,timeUnit)) != null){
+                try {
+                    task.run();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    task = null;
+                }
+            }
+            synchronized (workers){
+                workers.remove(this);
+            }
+        }
+    }
+}
+@Slf4j(topic = "c.Demo2")
+public class Demo2 {
+    public static void main(String[] args) {
+        ThreadPool threadPool = new ThreadPool(TimeUnit.MILLISECONDS,1,1000,1,
+                //1)死等
+//                (queue, task)->{queue.put(task)};
+                //2)带超时等待
+//                (queue,task) ->{ queue.offer(task,500, TimeUnit.MICROSECONDS);}
+                //3)放弃任务执行
+                //4)让调用者抛出异常
+//                (queue,task)->{throw new RuntimeException("任务执行失败"+task);}
+                //5)让调用者自己执行任务
+                (queue,task)->{task.run();}
+                );
+        for(int i = 0; i< 5; i ++){
+            int j = i;
+            threadPool.execute(()->{
+                try {
+                    Thread.sleep(1000L);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                log.debug("{}", j);
+            });
+        }
+    }
+}
+```
+
+### JDK Executors类中提供的方法创建线程池
+
+newFixedThreadPool实现
+
+```java
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+@Slf4j(topic = "c.Demo3")
+public class Demo3 {
+    public static void main(String[] args) {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        //ExecutorService pool = Executors.newCachedThreadPool();
+        //ExecutorService pool = Executors.newSingleThreadExecutor();
+        pool.execute(()->{
+            log.debug("1");
+        });
+        pool.execute(()->{
+            log.debug("2");
+        });
+        pool.execute(()->{
+            log.debug("3");
+        });
+    }
+}
+```
+
+### 提交任务
+
+```java
+// 执行任务
+void execute(Runnable command);
+
+// 提交任务 task，用返回值 Future 获得任务执行结果
+<T> Future<T> submit(Callable<T> task);
+
+// 提交 tasks 中所有任务
+<T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
+ throws InterruptedException;
+
+// 提交 tasks 中所有任务，带超时时间
+<T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks,
+ long timeout, TimeUnit unit)
+ throws InterruptedException;
+
+// 提交 tasks 中所有任务，哪个任务先成功执行完毕，返回此任务执行结果，其它任务取消
+<T> T invokeAny(Collection<? extends Callable<T>> tasks)
+ throws InterruptedException, ExecutionException;
+
+// 提交 tasks 中所有任务，哪个任务先成功执行完毕，返回此任务执行结果，其它任务取消，带超时时间
+<T> T invokeAny(Collection<? extends Callable<T>> tasks,
+ long timeout, TimeUnit unit)
+ throws InterruptedException, ExecutionException, TimeoutException;
+```
+
+```java
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.*;
+
+@Slf4j(topic = "c.Demo4")
+public class Demo4 {
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        method1(pool);
+        method2(pool);
+        method3(pool);
+    }
+
+    private static void method3(ExecutorService pool) throws InterruptedException, ExecutionException {
+        String str = pool.invokeAny(Arrays.asList(
+                () -> {
+                    log.debug("begin");
+                    Thread.sleep(1000);
+                    return "1";
+                },
+                () -> {
+                    log.debug("begin");
+                    Thread.sleep(500);
+                    return "2";
+                },
+                () -> {
+                    log.debug("begin");
+                    Thread.sleep(1000);
+                    return "3";
+                }
+        ));
+        log.debug("{}",str);
+    }
+
+    private static void method2(ExecutorService pool) throws InterruptedException {
+        List<Future<Object>> futures = pool.invokeAll(Arrays.asList(
+                () -> {
+                    log.debug("begin");
+                    Thread.sleep(1000);
+                    return "1";
+                },
+                () -> {
+                    log.debug("begin");
+                    Thread.sleep(1000);
+                    return "2";
+                },
+                () -> {
+                    log.debug("begin");
+                    Thread.sleep(1000);
+                    return "3";
+                }
+        ));
+        futures.forEach(f->{
+            try {
+                log.debug("{}",f.get());
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private static void method1(ExecutorService pool) throws InterruptedException, ExecutionException {
+        Future<String> submit = pool.submit(new Callable<String>() {
+
+            @Override
+            public String call() throws Exception {
+                log.debug("running...");
+                Thread.sleep(1000);
+                return "OK";
+            }
+        });
+        log.debug("{}",submit.get());
+    }
+}
+```
+
+### 关闭线程池
+
+shutdown()和shutdownnow()
+
+```java
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
+import java.util.concurrent.*;
+
+@Slf4j(topic = "c.Demo5")
+public class Demo5 {
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Future<String> submit1 = pool.submit(()->{
+                log.debug("running...");
+                Thread.sleep(1000);
+                return "1";
+        });
+        Future<String> submit2 = pool.submit(()->{
+            log.debug("running...");
+            Thread.sleep(1000);
+            return "2";
+        });
+        Future<String> submit3 = pool.submit(()->{
+            log.debug("running...");
+            Thread.sleep(1000);
+            return "3";
+        });
+//        pool.shutdown();
+        List<Runnable> runnables = pool.shutdownNow();
+        log.debug("{}",runnables);
+    }
+}
+```
+
+### 创建多个线程应对饥饿现象
+
+```java
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+@Slf4j(topic = "c.Demo6")
+public class Demo6 {
+    static final List<String> MENU = Arrays.asList("地三鲜", "宫保鸡丁", "辣子鸡丁", "烤鸡翅");
+    static Random RANDOM = new Random();
+    static String cooking() {
+        return MENU.get(RANDOM.nextInt(MENU.size()));
+    }
+
+    public static void main(String[] args) {
+        ExecutorService waiterPool = Executors.newFixedThreadPool(1);
+        ExecutorService cookPool = Executors.newFixedThreadPool(1);
+        waiterPool.execute(() -> {
+            log.debug("处理点餐...");
+            Future<String> f = cookPool.submit(() -> {
+                log.debug("做菜");
+                return cooking();
+            });
+            try {
+                log.debug("上菜: {}", f.get());
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+            }
+        });
+        waiterPool.execute(() -> {
+            log.debug("处理点餐...");
+            Future<String> f = cookPool.submit(() -> {
+                log.debug("做菜");
+                return cooking();
+            });
+            try {
+                log.debug("上菜: {}", f.get());
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+}
+```
+
+### ScheduledExecutorService延时和定时执行任务
+
+延时：
+
+```java
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j(topic = "c.Demo7")
+public class Demo7 {
+    public static void main(String[] args) {
+        ScheduledExecutorService pool = Executors.newScheduledThreadPool(2);
+        pool.schedule(()->{
+            log.debug("task1");
+        },1, TimeUnit.SECONDS);
+        pool.schedule(()->{
+            log.debug("task2");
+        },1, TimeUnit.SECONDS);
+
+    }
+}
+```
+
+定时：
+
+```java
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j(topic = "c.Demo7")
+public class Demo7 {
+    public static void main(String[] args) {
+        ScheduledExecutorService pool = Executors.newScheduledThreadPool(2);
+        log.debug("starting...");
+        pool.scheduleAtFixedRate(()->{
+            log.debug("running...");
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        },1,1,TimeUnit.SECONDS);
+    }
+}
+```
+
+### 实现让每周四18：00：00定时执行任务
+
+```java
+package tu.learn.test3;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j(topic = "c.Demo8")
+public class Demo8 {
+    public static void main(String[] args) {
+        ScheduledExecutorService pool = Executors.newScheduledThreadPool(2);
+
+        //获取当前时间
+        LocalDateTime now = LocalDateTime.now();
+
+        //获取周四时间
+        LocalDateTime time = now.withHour(18).withMinute(0).withSecond(0).withNano(0).with(DayOfWeek.THURSDAY);
+
+        //如果当前时间大于周四，则需要增加一周的时间
+        if(now.compareTo(time) > 0)time = time.plusWeeks(1);
+
+        //initialDelay代表当前时间和周四的时间插值
+        //period代表间隔时间
+        long initialDelay = Duration.between(now,time).toMillis();
+        long period = 7*24*60*60*1000;
+
+        pool.scheduleAtFixedRate(()->{
+            log.debug("running");
+        },initialDelay,period,TimeUnit.MILLISECONDS);
+    }
+}
+```
+
+### fork()/join()实现
+
+计算1-n的合
+
+```java
+package tu.learn.test3;
+
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RecursiveTask;
+
+@Slf4j(topic = "c.MyTask")
+class MyTask extends RecursiveTask<Integer>{
+    int n;
+
+    public MyTask(int n) {
+        this.n = n;
+    }
+
+    @Override
+    public String toString() {
+        return "{" + n + '}';
+    }
+
+    public int getN() {
+        return n;
+    }
+
+    @Override
+    protected Integer compute() {
+        // 如果 n 已经为 1，可以求得结果了
+        if (n == 1) {
+            log.debug("join() {}", n);
+            return n;
+        }
+
+        // 将任务进行拆分(fork)
+        MyTask t1 = new MyTask(n - 1);
+        t1.fork();
+        log.debug("fork() {} + {}", n, t1);
+
+        // 合并(join)结果
+        int result = n + t1.join();
+        log.debug("join() {} + {} = {}", n, t1, result);
+        return result;
+    }
+}
+public class Demo9 {
+    public static void main(String[] args) {
+        MyTask myTask = new MyTask(5);
+        System.out.println(myTask.fork().join());
+//        ForkJoinPool pool = new ForkJoinPool(4);
+//        System.out.println(pool.invoke(new MyTask(5)));
+    }
+
+}
+```
+
+改进
+
+```
+package tu.learn.test3;
+
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.RecursiveTask;
+
+@Slf4j(topic = "c.MyTask1")
+class MyTask1 extends RecursiveTask<Integer>{
+    int begin;
+    int end;
+
+    public MyTask1(int begin, int end) {
+        this.begin = begin;
+        this.end = end;
+    }
+
+    @Override
+    public String toString() {
+        return "{" + begin+","+end + '}';
+    }
+
+    public int getBegin() {
+        return begin;
+    }
+
+    public int getEnd() {
+        return end;
+    }
+
+    @Override
+    protected Integer compute() {
+        if(begin == end)return begin;
+       int mid = (begin + end) / 2;
+       MyTask1 t1 = new MyTask1(begin,mid);
+       t1.fork();
+
+       MyTask1 t2 = new MyTask1(mid+1,end);
+       t2.fork();
+
+       return t1.join() + t2.join();
+    }
+}
+public class Demo10 {
+    public static void main(String[] args) {
+        MyTask1 myTask = new MyTask1(1,5);
+        System.out.println(myTask.fork().join());
+//        ForkJoinPool pool = new ForkJoinPool(4);
+//        System.out.println(pool.invoke(new MyTask1(5)));
+    }
+
+}
+```
+
+### 使用AQS实现一个不可重入锁
+
+```java
+package tu.learn.test4;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.AbstractQueuedSynchronizer;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+
+class MyLock implements Lock{
+
+    class Mysync extends AbstractQueuedSynchronizer{
+        @Override
+        protected boolean tryAcquire(int arg) {
+            if(arg == 1){
+                if (compareAndSetState(0,1)){
+                    setExclusiveOwnerThread(Thread.currentThread());
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        protected boolean tryRelease(int arg) {
+            setExclusiveOwnerThread(null);
+            setState(0);
+            return true;
+        }
+
+        protected Condition newCondition(){
+            return new ConditionObject();
+        }
+
+        @Override
+        protected boolean isHeldExclusively() {
+            return getState() == 1;
+        }
+    }
+
+    Mysync mysync = new Mysync();
+    @Override
+    public void lock() {
+        mysync.acquire(1);
+    }
+
+    @Override
+    public void lockInterruptibly() throws InterruptedException {
+        mysync.acquireInterruptibly(1);
+    }
+
+    @Override
+    public boolean tryLock() {
+        return mysync.tryAcquire(1);
+    }
+
+    @Override
+    public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
+        return mysync.tryAcquireNanos(1, unit.toNanos(time));
+    }
+
+    @Override
+    public void unlock() {
+        mysync.release(1);
+    }
+
+    @Override
+    public Condition newCondition() {
+        return mysync.newCondition();
+    }
+}
+@Slf4j(topic = "c.Demo1")
+public class Demo1 {
+    public static void main(String[] args) {
+        MyLock lock = new MyLock();
+        new Thread(() -> {
+            lock.lock();
+            try {
+                log.debug("locking...");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            } finally {
+                log.debug("unlocking...");
+                lock.unlock();
+            }
+        },"t1").start();
+        new Thread(() -> {
+            lock.lock();
+            try {
+                log.debug("locking...");
+            } finally {
+                log.debug("unlocking...");
+                lock.unlock();
+            }
+        },"t2").start();
+    }
+}
+```
+
+### ReentrantReadWriteLock读写锁的例子
+
+```java
+package tu.learn.test4;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+@Slf4j(topic = "c.DataContainer")
+class DataContainer{
+    private Object data;
+    private ReentrantReadWriteLock rw = new ReentrantReadWriteLock();
+    private ReentrantReadWriteLock.ReadLock r = rw.readLock();
+    private ReentrantReadWriteLock.WriteLock w = rw.writeLock();
+
+    public Object read() throws InterruptedException {
+        log.debug("获取读锁");
+        r.lock();
+        try {
+            log.debug("读取：{}",data);
+            Thread.sleep(1000);
+
+            return data;
+        }finally {
+            r.unlock();
+        }
+    }
+    public void write() throws InterruptedException {
+        log.debug("获取写锁");
+        w.lock();
+        try{
+            log.debug("写入");
+            Thread.sleep(1000);
+        }finally {
+            w.unlock();
+        }
+    }
+}
+@Slf4j(topic = "c.Demo2")
+public class Demo2 {
+    public static void main(String[] args) {
+        DataContainer dataContainer = new DataContainer();
+        new Thread(()->{
+            try {
+                dataContainer.write();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        },"write").start();
+        new Thread(()->{
+            try {
+                dataContainer.read();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        },"read").start();
+
+    }
+}
+```
+
+### 使用StampedLock使用带有戳的读锁、写锁
+
+```java
+package tu.learn.test4;
+
+import lombok.extern.slf4j.Slf4j;
+import sun.util.calendar.LocalGregorianCalendar;
+
+import java.util.concurrent.locks.StampedLock;
+
+@Slf4j(topic = "c.DataContainer1")
+class DataContainerStamped{
+    private int data;
+    private final StampedLock lock = new StampedLock();
+
+    public DataContainerStamped(int data) {
+        this.data = data;
+    }
+
+    public int read(int readTime) throws InterruptedException {
+        long stamp = lock.tryOptimisticRead();
+        log.debug("optimistic read locking...{}",stamp);
+        Thread.sleep(readTime);
+        //检验锁是否一致
+        if(lock.validate(stamp)){
+            log.debug("read finish...{}",stamp);
+            return data;
+        }
+
+        log.debug("updating to read lock...{}",stamp);
+        try {
+            stamp = lock.readLock();
+            log.debug("read lock{}",stamp);
+            Thread.sleep(readTime);
+            log.debug("read finish...{}",stamp);
+            return data;
+        }finally {
+            log.debug("read unlock {}",stamp);
+            lock.unlockRead(stamp);
+        }
+    }
+
+    public void write(int newData) throws InterruptedException {
+        long stamp = lock.writeLock();
+        log.debug("write lock {}",stamp);
+        try{
+            Thread.sleep(2000);
+            this.data = newData;
+        }finally {
+            log.debug("write unlock {}",stamp);
+            lock.unlockWrite(stamp);
+        }
+    }
+}
+public class Demo3 {
+    public static void main(String[] args) throws InterruptedException {
+        DataContainerStamped dataContainer = new DataContainerStamped(1);
+        new Thread(() -> {
+            try {
+                dataContainer.read(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, "t1").start();
+        Thread.sleep(500);
+        new Thread(() -> {
+            try {
+                dataContainer.write(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, "t2").start();
+    }
+}
+```
+
+![image-20240418175239493](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240418175239493.png)
+
+### semaphore基本使用
+
+```
+package tu.learn.test4;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Semaphore;
+
+@Slf4j(topic = "c.Demo4")
+public class Demo4 {
+    public static void main(String[] args) {
+        Semaphore semaphore = new Semaphore(3);
+
+        for(int i = 0; i < 10; i ++){
+            int j = i;
+            new Thread(()->{
+                try {
+                    semaphore.acquire();
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                log.debug("{}运行",j);
+                semaphore.release();
+            }).start();
+        }
+    }
+}
+```
+
+### countdownlatch应用之同步等待多线程准备完毕
+
+```
+package tu.learn.test4;
+
+import java.util.Arrays;
+import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class Demo5 {
+    public static void main(String[] args) throws InterruptedException {
+        ExecutorService service = Executors.newFixedThreadPool(10);
+        CountDownLatch latch = new CountDownLatch(10);
+        Random random = new Random();
+        String[] all = new String[10];
+        for (int j = 0; j < 10; j ++) {
+            int k = j;
+            service.submit(()->{
+               for(int i = 0; i <= 100; i ++){
+                   try {
+                       Thread.sleep(random.nextInt(100));
+                   } catch (InterruptedException e) {
+                       e.printStackTrace();
+                   }
+                   all[k] = i + "%";
+                   System.out.print("\r"+Arrays.toString(all));
+               }
+               latch.countDown();
+            });
+        }
+
+        latch.await();
+        System.out.println("\n游戏开始");
+        service.shutdown();
+    }
+}
+```
+
+![image-20240418193013810](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240418193013810.png)
+
+### cyclicbarrier使用
+
+```
+package tu.learn.test4;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+@Slf4j(topic = "c.Demo6")
+public class Demo6 {
+    public static void main(String[] args) {
+        ExecutorService service = Executors.newFixedThreadPool(2);
+        CyclicBarrier barrier = new CyclicBarrier(2,()->{
+           log.debug("task1,task2 finished..");
+        });
+
+        for (int i = 0; i < 2; i ++) {
+            service.submit(()->{
+                try {
+                    log.debug("task1 begin...");
+                    Thread.sleep(1000);
+                    barrier.await();
+                } catch (InterruptedException | BrokenBarrierException e) {
+                    e.printStackTrace();
+                }
+            });
+            service.submit(()->{
+                try {
+                    log.debug("task2 begin...");
+                    Thread.sleep(1000);
+                    barrier.await();
+                } catch (InterruptedException | BrokenBarrierException e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+    }
+}
+```
+
+### ConcurrentHashMap 实现单词计数
+
+```java
+package tu.learn.test4;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
+
+public class Demo7 {
+    public static void main(String[] args) {
+        File file=new File("config.properties");
+        System.out.println(file.getAbsolutePath());
+        System.out.println(System.getProperty("user.dir"));
+
+        demo(
+                ()->new ConcurrentHashMap<String, LongAdder>(),
+                (map, words)->{
+                    for(String word : words){
+                        LongAdder longAdder = map.computeIfAbsent(word, (key) -> new LongAdder());
+                        longAdder.increment();
+//                        Integer counter = map.get(word);
+//                        int newValue = counter == null ? 1 : counter + 1;
+//                        map.put(word,newValue);
+                    }
+                }
+        );
+    }
+
+    private static <V> void demo(Supplier<Map<String, V>> supplier, BiConsumer<Map<String, V>, List<String>> consumer) {
+        Map<String, V> counterMap = supplier.get();
+        List<Thread> ts = new ArrayList<>();
+        for (int i = 1; i <= 3; i++) {
+            int idx = i;
+            Thread thread = new Thread(() -> {
+                List<String> words = readFromFile(idx);
+                consumer.accept(counterMap, words);
+            });
+            ts.add(thread);
+        }
+        ts.forEach(t -> t.start());
+        ts.forEach(t -> {
+            try {t.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        System.out.println(counterMap);
+    }
+    public static List<String> readFromFile(int i) {
+        ArrayList<String> words = new ArrayList<>();
+        String path =  i + ".txt";
+//        File file = new File(path);
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(path)))) {
+            while (true) {
+                String word = in.readLine();
+                if (word == null) {
+                    break;
+                }
+                words.add(word);
+            }
+            return words;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+
