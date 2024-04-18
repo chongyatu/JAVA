@@ -22,7 +22,7 @@ public class Demo1 {
 }
 ```
 
-![image-20240413140824994](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413140824994.png)
+![image-20240413140824994](JUC实战.assets/image-20240413140824994.png)
 
 ### 异步
 
@@ -51,7 +51,7 @@ public class Demo1 {
 }
 ```
 
-![image-20240413141251283](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413141251283.png)
+![image-20240413141251283](JUC实战.assets/image-20240413141251283.png)
 
 
 
@@ -88,7 +88,7 @@ public class Demo2 {
 }
 ```
 
-![image-20240413143204532](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413143204532.png)
+![image-20240413143204532](JUC实战.assets/image-20240413143204532.png)
 
 ### Runnable配合Thread创建
 
@@ -120,7 +120,7 @@ public class Demo2 {
 
 ```
 
-![image-20240413143521258](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413143521258.png)
+![image-20240413143521258](JUC实战.assets/image-20240413143521258.png)
 
 ### FutureTask配合Thread创建
 
@@ -151,7 +151,7 @@ public class Demo2 {
 
 ```
 
-![image-20240413144858890](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413144858890.png)
+![image-20240413144858890](JUC实战.assets/image-20240413144858890.png)
 
 ### 调用run方法
 
@@ -176,7 +176,7 @@ public class Demo3 {
 }
 ```
 
-![image-20240413151235374](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413151235374.png)
+![image-20240413151235374](JUC实战.assets/image-20240413151235374.png)
 
 ### 调用start方法
 
@@ -203,7 +203,7 @@ public class Demo3 {
 
 ```
 
-![image-20240413151443636](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413151443636.png)
+![image-20240413151443636](JUC实战.assets/image-20240413151443636.png)
 
 ### 调用sleep方法
 
@@ -240,7 +240,7 @@ public class Demo3 {
 }
 ```
 
-![image-20240413153415454](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413153415454.png)
+![image-20240413153415454](JUC实战.assets/image-20240413153415454.png)
 
 如何打断正在睡眠的线程？用interrupt
 
@@ -275,7 +275,7 @@ public class Demo3 {
 }
 ```
 
-![image-20240413153920712](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413153920712.png)
+![image-20240413153920712](JUC实战.assets/image-20240413153920712.png)
 
 ### 调用yield方法
 
@@ -306,7 +306,7 @@ public class Demo4 {
 }
 ```
 
-![image-20240413155447607](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413155447607.png)
+![image-20240413155447607](JUC实战.assets/image-20240413155447607.png)
 
 ### 调用setPriority方法
 
@@ -353,7 +353,7 @@ public class Demo5 {
 }
 ```
 
-![image-20240413160241055](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413160241055.png)
+![image-20240413160241055](JUC实战.assets/image-20240413160241055.png)
 
 2优先级更高所以累加得更块。
 
@@ -385,7 +385,7 @@ public class Demo6 {
 }
 ```
 
-![image-20240413161800163](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413161800163.png)
+![image-20240413161800163](JUC实战.assets/image-20240413161800163.png)
 
 ### 调用interrupt、isInterrupted方法
 
@@ -455,7 +455,7 @@ public class Demo8 {
 }
 ```
 
-![image-20240413170226406](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413170226406.png)
+![image-20240413170226406](JUC实战.assets/image-20240413170226406.png)
 
 打断park线程，不会清空打断状态。
 
@@ -485,7 +485,7 @@ public class Demo10 {
 }
 ```
 
-![image-20240413203544116](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413203544116.png)
+![image-20240413203544116](JUC实战.assets/image-20240413203544116.png)
 
 ### 使用interrupt和isInterrupted方法实现两阶段终止模式
 
@@ -539,7 +539,7 @@ public class Demo9 {
 }
 ```
 
-![image-20240413202639410](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413202639410.png)
+![image-20240413202639410](JUC实战.assets/image-20240413202639410.png)
 
 ### Other functions
 
@@ -566,7 +566,7 @@ public class Demo11 {
 }
 ```
 
-![image-20240413204741798](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413204741798.png)
+![image-20240413204741798](JUC实战.assets/image-20240413204741798.png)
 
 ### 实现守护线程
 
@@ -598,13 +598,13 @@ public class Demo12 {
 
 daemon线程在1s后结束运行
 
-![image-20240413210327434](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413210327434.png)
+![image-20240413210327434](JUC实战.assets/image-20240413210327434.png)
 
 ### 烧水泡茶练习
 
 烧水泡茶需要完成下面的工作，如何用最短时间实现该过程？
 
-![image-20240413211213633](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413211213633.png)
+![image-20240413211213633](JUC实战.assets/image-20240413211213633.png)
 
 ```java
 package tu.learn.test;
@@ -658,7 +658,7 @@ public class Demo13 {
 }
 ```
 
-![image-20240413211707774](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240413211707774.png)
+![image-20240413211707774](JUC实战.assets/image-20240413211707774.png)
 
 ## 三、管程练习
 
@@ -700,7 +700,7 @@ public class Demo1 {
 }
 ```
 
-![image-20240414114038691](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240414114038691.png)
+![image-20240414114038691](JUC实战.assets/image-20240414114038691.png)
 
 ### synchronized思考
 
@@ -1475,11 +1475,11 @@ public class Demo6 {
 
 调用notify()
 
-![image-20240415101820990](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415101820990.png)
+![image-20240415101820990](JUC实战.assets/image-20240415101820990.png)
 
 调用notifyAll()
 
-![image-20240415101911985](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415101911985.png)
+![image-20240415101911985](JUC实战.assets/image-20240415101911985.png)
 
 ### 对wait和sleep进行比较
 
@@ -1548,7 +1548,7 @@ public class Demo8 {
 }
 ```
 
-![image-20240415112518863](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415112518863.png)
+![image-20240415112518863](JUC实战.assets/image-20240415112518863.png)
 
 使用保护性暂停模式实现带控制超时时间一个线程等待另一个线程的执行结果？
 
@@ -1619,11 +1619,11 @@ public class Demo8 {
 
 当获取结果未超时
 
-![image-20240415134932676](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415134932676.png)
+![image-20240415134932676](JUC实战.assets/image-20240415134932676.png)
 
 当获取结果超时
 
-![image-20240415135007937](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415135007937.png)
+![image-20240415135007937](JUC实战.assets/image-20240415135007937.png)
 
 使用GuardedObject实现信箱，使得居民能从信箱取信，邮递员能将信放入信箱。
 
@@ -1747,7 +1747,7 @@ public class Demo9 {
 }
 ```
 
-![image-20240415190837295](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415190837295.png)
+![image-20240415190837295](JUC实战.assets/image-20240415190837295.png)
 
 ### 生产者/消费者模式
 
@@ -1843,7 +1843,7 @@ public class Demo10 {
 }
 ```
 
-![image-20240415195211041](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415195211041.png)
+![image-20240415195211041](JUC实战.assets/image-20240415195211041.png)
 
 ### 使用park/unpark
 
@@ -1883,7 +1883,7 @@ public class Demo11 {
 }
 ```
 
-![image-20240415200031255](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415200031255.png)
+![image-20240415200031255](JUC实战.assets/image-20240415200031255.png)
 
 ### park/unpark 与wait/notify比较
 
@@ -1893,7 +1893,7 @@ public class Demo11 {
 
 ### 线程状态转换
 
-![image-20240415204247170](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415204247170.png)
+![image-20240415204247170](JUC实战.assets/image-20240415204247170.png)
 
 1. NEW-->RUNNABLE：调用t.start方法，由 NEW --> RUNNABLE
 
@@ -1958,7 +1958,7 @@ public class Demo12 {
 }
 ```
 
-![image-20240415212301872](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415212301872.png)
+![image-20240415212301872](JUC实战.assets/image-20240415212301872.png)
 
 ### 实现哲学家就餐问题的死锁
 
@@ -2036,7 +2036,7 @@ public class Demo13 {
 }
 ```
 
-![image-20240415213630479](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415213630479.png)
+![image-20240415213630479](JUC实战.assets/image-20240415213630479.png)
 
 ### 实现一个活锁
 
@@ -2125,7 +2125,7 @@ public class Demo15 {
 }
 ```
 
-![image-20240415220812182](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415220812182.png)
+![image-20240415220812182](JUC实战.assets/image-20240415220812182.png)
 
 实现可打断
 
@@ -2171,7 +2171,7 @@ public class Demo16 {
 }
 ```
 
-![image-20240415223041138](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415223041138.png)
+![image-20240415223041138](JUC实战.assets/image-20240415223041138.png)
 
 实现锁超时
 
@@ -2215,7 +2215,7 @@ public class Demo16 {
 
 ```
 
-![image-20240415224022381](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240415224022381.png)
+![image-20240415224022381](JUC实战.assets/image-20240415224022381.png)
 
 使用tryLock解决哲学家就餐问题的死锁
 
@@ -2421,7 +2421,7 @@ public class Demo18 {
 }
 ```
 
-![image-20240416114343405](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240416114343405.png)
+![image-20240416114343405](JUC实战.assets/image-20240416114343405.png)
 
 ### 实现固定顺序输出
 
@@ -3185,7 +3185,7 @@ public class Demo9 {
 }
 ```
 
-![image-20240417135613503](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240417135613503.png)
+![image-20240417135613503](JUC实战.assets/image-20240417135613503.png)
 
 ## 五、 共享模型之不可变和共享模型工具
 
@@ -4159,7 +4159,7 @@ public class Demo3 {
 }
 ```
 
-![image-20240418175239493](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240418175239493.png)
+![image-20240418175239493](JUC实战.assets/image-20240418175239493.png)
 
 ### semaphore基本使用
 
@@ -4232,7 +4232,7 @@ public class Demo5 {
 }
 ```
 
-![image-20240418193013810](C:\Users\32258\AppData\Roaming\Typora\typora-user-images\image-20240418193013810.png)
+![image-20240418193013810](JUC实战.assets/image-20240418193013810.png)
 
 ### cyclicbarrier使用
 
@@ -4351,4 +4351,3 @@ public class Demo7 {
     }
 }
 ```
-
